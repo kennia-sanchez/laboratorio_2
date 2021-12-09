@@ -1,0 +1,332 @@
+LIBRARY ieee;
+USE ieee.std_logic_1164.all;
+
+ENTITY part4 IS 
+   PORT ( SW   : IN  STD_LOGIC_VECTOR(8 DOWNTO 0);
+          LEDR : OUT STD_LOGIC_VECTOR(9 DOWNTO 0);
+          HEX5, HEX4, HEX3, HEX2, HEX1, HEX0 : OUT STD_LOGIC_VECTOR(6 DOWNTO 0));
+END part4;
+
+ARCHITECTURE Behavior OF part4 IS
+   COMPONENT fa4
+      PORT ( a, b, ci : IN  STD_LOGIC;
+             s, co    : OUT STD_LOGIC);
+   END COMPONENT;
+   
+	COMPONENT bcd7seg4
+      PORT ( B : IN  STD_LOGIC_VECTOR(3 DOWNTO 0);
+             H : OUT STD_LOGIC_VECTOR(0 TO 6));
+   END COMPONENT;
+   
+   COMPONENT mux4_2to1_4bit
+      PORT ( X, Y : IN  STD_LOGIC_VECTOR(3 DOWNTO 0);
+             s    : IN  STD_LOGIC;
+             M    : OUT STD_LOGIC_VECTOR(3 DOWNTO 0));
+   END COMPONENT;
+   
+	COMPONENT part24 
+      PORT ( V : IN     STD_LOGIC_VECTOR(3 DOWNTO 0);
+             M : OUT    STD_LOGIC_VECTOR(3 DOWNTO 0));
+   END COMPONENT;
+	
+	
+	SIGNAL X, Y, S : STD_LOGIC_VECTOR(3 DOWNTO 0);   -- Datum, Datum, Sum
+   SIGNAL Cin :     STD_LOGIC;                      -- Input carry
+   SIGNAL C :       STD_LOGIC_VECTOR(4 DOWNTO 1);   -- Internal carry
+   SIGNAL M :       STD_LOGIC_VECTOR(3 DOWNTO 0);   -- U-digit
+   SIGNAL B, S0 :   STD_LOGIC_VECTOR(3 DOWNTO 0);   -- T-digit
+   SIGNAL z, S1 :   STD_LOGIC;
+	
+	
+BEGIN
+
+--                                                                                    	                         
+--                                               .------------------.                	                         
+--                                               |                  |                                            
+--           .-------.         .------------------)--.------------. |  .----.  S1 .-----.   .---------.          
+-- Cin ------|       | C(4)    |      .---. z    |   |            | '-- .    .----|"000"|   |         |          
+--           |       |-------.-'    .-| Z |---.--'   |    C(4)    '---- .    .    |  &  |---| bcd7seg |---- HEX1
+--           |       |       |      | '---'   |      '----------.      '----'     |  S1 |   '---------'          
+-- X -/-.----| Adder |       |      |       |\'                 |                 '-----'                        
+--    4 |    |       |  S    |    .-'-------|0\  M            |\'                          .---------.                      
+--      |    |       |       |  S |         |  |--.-----------|0\    S0                    |         |          
+--      |    |       |--/-.--)--/-| .---. .-|  |  |           |  |-------------------------| bcd7seg |----- HEX0
+-- Y -/--)-.-|       |  4 | |   4 | |   | | |1/   |  ---.   .-|  |                         '---------'           
+--    4 |  | '-------'    | |     '-| A |-' |/    | |   | B | |1/                                                
+--      |  |              | |       |   |         '-| B |-/-' |/  S0:= sum,  M|(sum<9);  M - 10 (sum >= 10 -15,16- 19)
+--      |  |              | |       '---'           |   | 4                                                      
+--      |  |              | |                       '---'                                                      
+--      |  |              | |                                                                                 
+--      |  |              | '---------------------------------------------------------------|___ LEDR(4 DOWNTO 0)                    
+--      |  |               \                                                             S  |                                               
+--      |  |     .-------.  '------------------------------------------------------------/--|                                              
+--      |  '-.---| check |                                                               4                                                         
+--      |    |   | valid |------------------------------------------------------------------------------- LEDR(9)                                                
+--      '-.---)--| Data  |                                                                                                              
+--        |  |   '-------'                                                                 .---------.                                               
+--        |  |                                                      Y                      |         |                                          
+--        |  '------------------------------------------------------/----------------------| bcd7seg |----- HEX3
+--        |                                                         4                      '---------'           
+--        |                                                                                .---------.                                               
+--        |                                                         X                      |         |                                            
+--        '---------------------------------------------------------/----------------------| bcd7seg |----- HEX4
+--                                                                  4                      '---------'          
+--                                                                                                              
+
+
+
+
+
+
+   --                                                   --........Data
+   Cin <= SW(8);                                        -- Input carry
+	X <= SW(7 DOWNTO 4);                                 -- X
+   Y <= SW(3 DOWNTO 0);                                 -- Y
+   
+	--                                                   --........Adder
+   bit0: fa4 PORT MAP (X(0), Y(0),  Cin, S(0), C(1));   -- sum:=  S
+   bit1: fa4 PORT MAP (X(1), Y(1), C(1), S(1), C(2));
+   bit2: fa4 PORT MAP (X(2), Y(2), C(2), S(2), C(3));
+   bit3: fa4 PORT MAP (X(3), Y(3), C(3), S(3), C(4));   -- Output Carry:=C(4)
+   LEDR(4 DOWNTO 0) <= (C(4) & S);                      -- Display Result in binary format:               LEDR(4:0)
+   
+   --                                                   --........bcd 7 segment decoder
+   HEX5 <= "1111111";                                   -- Not used
+   H_4: bcd7seg4 PORT MAP (X, HEX4);                    -- Display  X in 7 segment Display:               HEX4
+   
+   H_3: bcd7seg4 PORT MAP (Y, HEX3);                    -- Display  Y in 7 segment Display:               HEX3
+   HEX2 <= "1111111";                                   -- Not used
+   
+	
+   --                                                   -- Check for no valid data (X > 9) or (Y > 9):    LEDR(9)
+   LEDR(9) <= (X(3) AND X(2)) OR (X(3) AND X(1)) OR 
+              (Y(3) AND Y(2)) OR (Y(3) AND Y(1));
+				  
+				  
+   LEDR(8 DOWNTO 5) <= "0000";                          -- Not used
+	
+   
+   --                                                   --........part 2 component
+   U1: part24 PORT MAP (S, M);                          -- sum_unit:= M= S when S<9 else M= S-10 when S=[10,11, ... ,15]
+   -- Sum_total :=  C(4) & S  :  C(4) S3 S2 S1 S0
+   -- bcd7seg4  :=  B3 B2 B1 B0	
+	
+	--                                                   -- sum:= B= S-10 when S=[16, 17, ... , 19] else does not care
+   B(3) <= M(1);
+   B(2) <= NOT(M(1));
+   B(1) <= NOT(M(1));
+   B(0) <= M(0);
+   --                                                   --........Multiplexer 2 to 1, 4 bits wide
+   U2: mux4_2to1_4bit PORT MAP (M, B, C(4), S0);        -- sum_unit:= S0
+	
+   --                                                   --........bcd 7 segment decoder
+   H0: bcd7seg4 PORT MAP (S0, HEX0);                    -- Display sum_unit in 7 segment Display:         HEX0
+   
+   z <= (S(3) AND S(2)) OR (S(3) AND S(1));             -- sum_tens:= S1= 1 when (10 <= S <= 15) or (S => 16) else 0
+   S1 <= z OR C(4);
+   
+   --                                                   --........bcd 7 segment decoder
+   H1: bcd7seg4 PORT MAP ("000" & S1, HEX1);            -- Display sum_tens in 7 segment Display:         HEX1
+	
+	
+END Behavior;
+
+
+
+
+
+
+
+
+LIBRARY ieee;
+USE ieee.std_logic_1164.all;
+
+ENTITY fa4 IS
+   PORT ( a, b, ci : IN  STD_LOGIC;
+          s, co    : OUT STD_LOGIC);
+END fa4;
+
+ARCHITECTURE Behavior OF fa4 IS
+
+BEGIN
+
+
+--    b   a   ci     co   s
+--    -----------------------
+--    0   0   0      0    0   
+--    0   0   1      0    1   
+--    0   1   0      0    1   
+--    0   1   1      1    0   
+--    1   0   0      0    1   
+--    1   0   1      1    0   
+--    1   1   0      1    0  
+--    1   1   1      1    1   
+
+   s       <= (a XOR b) XOR ci;
+   co      <= (NOT(a XOR b) AND b) OR ((a XOR b) AND ci);
+END Behavior;
+
+
+
+
+
+
+
+--   .-._.-._.-._.-._.-._.-._.-._.-._.-._.-._.-._.-.
+--  (                                               )
+--   )   Binary-to-decimal conversion circuit      (
+--  (                                               )
+--   ._.-._.-._.-._.-._.-._.-._.-._.-._.-._.-._.-._.
+LIBRARY ieee;
+USE ieee.std_logic_1164.all;
+
+ENTITY part24 IS 
+   PORT ( V : IN     STD_LOGIC_VECTOR(3 DOWNTO 0);
+          M : OUT    STD_LOGIC_VECTOR(3 DOWNTO 0));
+END part24;
+
+ARCHITECTURE Behavior OF part24 IS
+   
+   COMPONENT mux4_2to1_4bit
+      PORT ( X, Y : IN  STD_LOGIC_VECTOR(3 DOWNTO 0);
+             s    : IN  STD_LOGIC;
+             M    : OUT STD_LOGIC_VECTOR(3 DOWNTO 0));
+   END COMPONENT;
+	
+	SIGNAL A : STD_LOGIC_VECTOR(3 DOWNTO 0);
+   SIGNAL z :     STD_LOGIC;
+
+BEGIN
+   
+--           V        H1      H0          z      A
+--        ---------------------------------------------   
+--         0000       0        1          0      x       
+--         0001       0        2          0      x       
+--         ...                                           
+--         1001       0        9          0      x       
+--                                                       
+--         1010       1        0          1     0000     
+--         1011       1        1          1     0001     
+--         1100       1        2          1     0010     
+--         1101       1        3          1     0011     
+--         1110       1        4          1     0100     
+--         1111       1        5          1     0101     
+--	                                                      
+--                                                       
+--                    .---.  z                           
+--              .-----| Z |----.                         
+--              |     '---'    |                         
+--              |            |\'                         
+--          .---'------------|0\    M                    
+--       4  |                |  |__________              
+--   V --/--|   .----.  .----|  |                        
+--          |   |    |  |    |1/                         
+--          '---| A  |--'    |/                          
+--              |    |                                   
+--              '----'                                   
+--                                                       
+	
+   z <= (V(3) AND V(2)) OR (V(3) AND V(1));
+	
+   A(3) <= '0';
+   A(2) <= V(2) AND V(1);
+   A(1) <= V(2) AND NOT(V(1));
+   A(0) <= (V(1) AND V(0)) OR (V(2) AND V(0));
+	
+   U1: mux4_2to1_4bit PORT MAP (V, A, z, M);
+END Behavior;
+
+
+
+
+
+
+
+
+LIBRARY ieee;
+USE ieee.std_logic_1164.all;
+
+--   .-._.-._.-._.-._.-._.-._.-._.-._.-._.-._.-._.-.
+--  (                                               )
+--   )   4bits        MUX   2  to 1                (
+--  (                                               )
+--   ._.-._.-._.-._.-._.-._.-._.-._.-._.-._.-._.-._.
+
+ENTITY mux4_2to1_4bit IS
+   PORT ( X, Y : IN  STD_LOGIC_VECTOR(3 DOWNTO 0);
+          s    : IN  STD_LOGIC;
+          M    : OUT STD_LOGIC_VECTOR(3 DOWNTO 0));
+END mux4_2to1_4bit;
+
+ARCHITECTURE Behavior OF mux4_2to1_4bit IS
+BEGIN
+
+--                      
+--       s ----.        
+--             |        
+--           |\'        
+--      X ---|0\        
+--           |  |___ M  
+--      Y ---|1 |       
+--           | /        
+--           |/         
+--                  
+
+
+   M(0) <= (NOT(s) AND X(0)) OR (s AND Y(0));
+   M(1) <= (NOT(s) AND X(1)) OR (s AND Y(1));
+   M(2) <= (NOT(s) AND X(2)) OR (s AND Y(2));
+   M(3) <= (NOT(s) AND X(3)) OR (s AND Y(3));
+END Behavior;
+
+
+
+
+
+
+
+
+LIBRARY ieee;
+USE ieee.std_logic_1164.all;
+
+--   .-._.-._.-._.-._.-._.-._.-._.-._.-._.-._.-._.-.
+--  (                                               )
+--   )   BCD to 7 Segment Display Decoder          (
+--  (                                               )
+--   ._.-._.-._.-._.-._.-._.-._.-._.-._.-._.-._.-._.
+
+ENTITY bcd7seg4 IS
+   PORT ( B : IN  STD_LOGIC_VECTOR(3 DOWNTO 0);
+          H : OUT STD_LOGIC_VECTOR(6 DOWNTO 0));
+END bcd7seg4;
+
+ARCHITECTURE Behavior OF bcd7seg4 IS
+BEGIN
+
+   --                           B        H
+   --       0                ----------------
+   --      ---                0000    0000001
+   --     |   |               0001    1001111
+   --    5|   |1              0010    0010010
+   --     | 6 |               0011    0000110
+   --      ---                0100    1001100
+   --     |   |               0101    0100100
+   --    4|   |2              0110    0100000
+   --     |   |               0111    0001111
+   --      ---                1000    0000000
+   --       3                 1001    0000100
+   --
+
+   H(0) <= (NOT(B(3)) AND B(2) AND NOT(B(1)) AND NOT(B(0))) OR 
+      (NOT(B(3)) AND NOT(B(2)) AND NOT(B(1)) AND B(0));
+   H(1) <= (B(2) AND NOT(B(1)) AND B(0)) OR
+      (B(2) AND B(1) AND NOT(B(0)));
+   H(2) <= (NOT(B(2)) AND B(1) AND NOT(B(0)));
+   H(3) <= (NOT(B(3)) AND NOT(B(2)) AND NOT(B(1)) AND B(0)) OR 
+      (NOT(B(3)) AND B(2) AND NOT(B(1)) AND NOT(B(0))) OR (NOT(B(3)) AND B(2) AND B(1) AND B(0));
+   H(4) <= (NOT(B(1)) AND B(0)) OR (NOT(B(3)) AND B(0)) OR 
+      (NOT(B(3)) AND B(2) AND NOT(B(1)));
+   H(5) <= (B(1) AND B(0)) OR (NOT(B(2)) AND B(1)) OR 
+      (NOT(B(3)) AND NOT(B(2)) AND B(0));
+   H(6) <= (B(2) AND B(1) AND B(0)) OR (NOT(B(3)) AND NOT(B(2)) AND NOT(B(1)));
+END Behavior;
